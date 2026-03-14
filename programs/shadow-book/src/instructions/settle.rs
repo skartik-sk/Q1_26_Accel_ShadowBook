@@ -41,6 +41,5 @@ pub struct Settle<'info> {
     // - fee vault EATA
     // - token_program
     // - system_program
-
     pub system_program: Program<'info, System>,
 }

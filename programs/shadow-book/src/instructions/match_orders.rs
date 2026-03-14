@@ -49,6 +49,5 @@ pub struct MatchOrders<'info> {
     // - magic_program: Program (MagicProgram)
     //
     // Uses #[commit] macro to auto-inject magic_context + magic_program.
-
     pub system_program: Program<'info, System>,
 }

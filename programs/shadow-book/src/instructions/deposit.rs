@@ -32,6 +32,5 @@ pub struct Deposit<'info> {
     // - ephemeral_ata (EATA pattern)
     // - token_program
     // - system_program
-
     pub system_program: Program<'info, System>,
 }

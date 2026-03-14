@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  SOLANA_VERSION: "3.1.11"
+  ANCHOR_VERSION: "0.32.1"
+  RUST_TOOLCHAIN: "1.86.0"
+  NODE_VERSION: "20"
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Rust: build program, run clippy, run unit tests
+  # --------------------------------------------------------------------------
+  build-and-lint:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy, rustfmt
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${{ env.SOLANA_VERSION }}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor CLI
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --force --locked
+
+      - name: Verify toolchain
+        run: |
+          solana --version
+          anchor --version
+          rustc --version
+          cargo-build-sbf --version
+
+      - name: Build program
+        run: anchor build
+
+      - name: Run clippy
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Rust unit tests
+        run: cargo test --workspace
+
+  # --------------------------------------------------------------------------
+  # TypeScript: lint SDK and test files
+  # --------------------------------------------------------------------------
+  ts-lint:
+    name: TypeScript Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Check TypeScript compilation
+        run: npx tsc --noEmit --skipLibCheck
+
+  # --------------------------------------------------------------------------
+  # Security: check for known vulnerabilities in dependencies
+  # --------------------------------------------------------------------------
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        run: cargo audit
+        continue-on-error: true  # advisory-only for now; promote to hard fail once deps stabilize

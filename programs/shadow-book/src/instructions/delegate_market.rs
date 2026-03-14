@@ -44,6 +44,5 @@ pub struct DelegateMarket<'info> {
     // - delegation_buffer, delegation_record, delegation_metadata
     // - owner_program (this program)
     // - system_program
-
     pub system_program: Program<'info, System>,
 }

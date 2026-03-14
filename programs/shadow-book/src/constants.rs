@@ -4,30 +4,23 @@ use anchor_lang::prelude::*;
 // External Program IDs
 // ---------------------------------------------------------------------------
 
-pub const DELEGATION_PROGRAM_ID: Pubkey =
-    pubkey!("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");
+pub const DELEGATION_PROGRAM_ID: Pubkey = pubkey!("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");
 
-pub const PERMISSION_PROGRAM_ID: Pubkey =
-    pubkey!("ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1");
+pub const PERMISSION_PROGRAM_ID: Pubkey = pubkey!("ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1");
 
-pub const MAGIC_PROGRAM_ID: Pubkey =
-    pubkey!("Magic11111111111111111111111111111111111111");
+pub const MAGIC_PROGRAM_ID: Pubkey = pubkey!("Magic11111111111111111111111111111111111111");
 
-pub const MAGIC_CONTEXT_ID: Pubkey =
-    pubkey!("MagicContext1111111111111111111111111111111");
+pub const MAGIC_CONTEXT_ID: Pubkey = pubkey!("MagicContext1111111111111111111111111111111");
 
-pub const ORACLE_PROGRAM_ID: Pubkey =
-    pubkey!("PriCems5tHihc6UDXDjzjeawomAwBduWMGAi8ZUjppd");
+pub const ORACLE_PROGRAM_ID: Pubkey = pubkey!("PriCems5tHihc6UDXDjzjeawomAwBduWMGAi8ZUjppd");
 
 // ---------------------------------------------------------------------------
 // TEE Validators
 // ---------------------------------------------------------------------------
 
-pub const DEVNET_TEE_VALIDATOR: Pubkey =
-    pubkey!("FnE6VJT5QNZdedZPnCoLsARgBwoE6DeJNjBs2H1gySXA");
+pub const DEVNET_TEE_VALIDATOR: Pubkey = pubkey!("FnE6VJT5QNZdedZPnCoLsARgBwoE6DeJNjBs2H1gySXA");
 
-pub const MAINNET_TEE_VALIDATOR: Pubkey =
-    pubkey!("MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo");
+pub const MAINNET_TEE_VALIDATOR: Pubkey = pubkey!("MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo");
 
 // ---------------------------------------------------------------------------
 // Order Book Limits

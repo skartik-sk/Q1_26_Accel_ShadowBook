@@ -1,8 +1,8 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::{MAX_MATCHES, MAX_ORDERS};
-use super::order::Order;
 use super::match_result::MatchResult;
+use super::order::Order;
+use crate::constants::{MAX_MATCHES, MAX_ORDERS};
 
 // ---------------------------------------------------------------------------
 // MarketState — the core account

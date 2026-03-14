@@ -33,6 +33,5 @@ pub struct CancelOrderPer<'info> {
     // TODO (Chunk C): Add PER accounts
     // - magic_context
     // - magic_program
-
     pub system_program: Program<'info, System>,
 }

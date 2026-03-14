@@ -1,22 +1,22 @@
 // ---------------------------------------------------------------------------
 // Mainnet instructions
 // ---------------------------------------------------------------------------
-pub mod initialize_market;
-pub mod deposit;
-pub mod withdraw;
-pub mod create_order;
 pub mod cancel_order;
-pub mod settle;
 pub mod claim_expired;
 pub mod collect_fees;
+pub mod create_order;
 pub mod delegate_market;
+pub mod deposit;
+pub mod initialize_market;
+pub mod settle;
+pub mod withdraw;
 
 // ---------------------------------------------------------------------------
 // PER instructions (run inside TEE)
 // ---------------------------------------------------------------------------
-pub mod submit_order_size;
-pub mod match_orders;
 pub mod cancel_order_per;
+pub mod match_orders;
+pub mod submit_order_size;
 
 // ---------------------------------------------------------------------------
 // Re-exports

@@ -78,9 +78,7 @@ pub fn find_order(market: &MarketState, order_id: u64, side: Side) -> Option<usi
         Side::Sell => (&market.asks[..], market.ask_count as usize),
     };
 
-    orders[..count]
-        .iter()
-        .position(|o| o.order_id == order_id)
+    orders[..count].iter().position(|o| o.order_id == order_id)
 }
 
 // ---------------------------------------------------------------------------
@@ -111,8 +109,7 @@ pub fn remove_order_at(market: &mut MarketState, index: usize, side: Side) -> Re
 
 /// Remove an order by `order_id`. Combines find + remove.
 pub fn remove_order(market: &mut MarketState, order_id: u64, side: Side) -> Result<Order> {
-    let index = find_order(market, order_id, side)
-        .ok_or(ShadowBookError::OrderNotFound)?;
+    let index = find_order(market, order_id, side).ok_or(ShadowBookError::OrderNotFound)?;
     remove_order_at(market, index, side)
 }
 

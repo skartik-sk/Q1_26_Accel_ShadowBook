@@ -27,6 +27,5 @@ pub struct Withdraw<'info> {
     // - trader_token_account
     // - token_program
     // - system_program
-
     pub system_program: Program<'info, System>,
 }

@@ -25,7 +25,12 @@ pub mod shadow_book {
         keeper_reward_bps: u16,
         oracle_feed_id: [u8; 32],
     ) -> Result<()> {
-        instructions::initialize_market::handler(ctx, fee_rate_bps, keeper_reward_bps, oracle_feed_id)
+        instructions::initialize_market::handler(
+            ctx,
+            fee_rate_bps,
+            keeper_reward_bps,
+            oracle_feed_id,
+        )
     }
 
     /// Deposit SPL tokens into the market vault.
@@ -87,11 +92,7 @@ pub mod shadow_book {
     }
 
     /// Cancel an order from inside the TEE.
-    pub fn cancel_order_per(
-        ctx: Context<CancelOrderPer>,
-        order_id: u64,
-        side: u8,
-    ) -> Result<()> {
+    pub fn cancel_order_per(ctx: Context<CancelOrderPer>, order_id: u64, side: u8) -> Result<()> {
         instructions::cancel_order_per::handler(ctx, order_id, side)
     }
 }

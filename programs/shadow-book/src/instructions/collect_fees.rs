@@ -28,6 +28,5 @@ pub struct CollectFees<'info> {
     // - authority_token_account
     // - vault / vault_ata
     // - token_program
-
     pub system_program: Program<'info, System>,
 }

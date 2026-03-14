@@ -37,7 +37,6 @@ pub struct SubmitOrderSize<'info> {
 
     #[account(mut)]
     pub market: AccountLoader<'info, MarketState>,
-
     // NOTE: This instruction runs inside PER only.
     // Uses #[ephemeral] module attribute (Chunk C will add this).
 }
