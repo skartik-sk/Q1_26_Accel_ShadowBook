@@ -102,9 +102,12 @@ tests/
 ## Getting Started
 
 ```bash
-# Clone the repository
-git clone https://github.com/solana-turbin3/Q1_26_Accel_ShadowBook.git
+# Fork the repo on GitHub, then clone your fork
+git clone https://github.com/<your-username>/Q1_26_Accel_ShadowBook.git
 cd Q1_26_Accel_ShadowBook
+
+# Add upstream remote
+git remote add upstream https://github.com/solana-turbin3/Q1_26_Accel_ShadowBook.git
 
 # Install dependencies
 yarn install
@@ -118,6 +121,8 @@ anchor test
 # Deploy to devnet (sets up wallet, airdrops SOL, builds, and deploys)
 ./scripts/setup-devnet.sh
 ```
+
+Direct pushes to `main` are disabled. All changes go through pull requests with at least one approval and passing CI before merge.
 
 ## Work Chunks
 
