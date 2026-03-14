@@ -1,0 +1,36 @@
+[package]
+name = "shadow-book"
+version = "0.1.0"
+description = "Privacy-preserving dark pool DEX on Solana using MagicBlock PER"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "shadow_book"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = "0.32.1"
+# anchor-spl = "0.32.1"  # TODO: Re-enable when platform-tools supports edition2024
+# Chunk B owner: uncomment when implementing SPL token transfers
+bytemuck = { version = "1.14", features = ["derive"] }
+
+# NOTE: ephemeral-rollups-sdk = "0.8.8" is required but currently causes a
+# build failure with platform-tools v1.48 (rustc 1.84) due to blake3 ->
+# constant_time_eq 0.4.x requiring edition2024. Uncomment when platform-tools
+# is updated to v1.49+ or Solana CLI is upgraded past 2.3.13.
+# Chunk C owner: uncomment this and add #[ephemeral], #[delegate], #[commit] macros.
+# ephemeral-rollups-sdk = "0.8.8"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

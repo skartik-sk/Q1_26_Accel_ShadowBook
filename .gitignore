@@ -1,0 +1,27 @@
+# Anchor / Solana
+.anchor
+target
+test-ledger
+
+# Node
+node_modules
+.yarn
+
+# Build artifacts
+*.so
+**/*.rs.bk
+
+# IDE
+.DS_Store
+.idea
+.vscode
+*.swp
+*.swo
+
+# Env
+.env
+.env.*
+
+# PnP (Yarn)
+.pnp.cjs
+.pnp.loader.mjs
