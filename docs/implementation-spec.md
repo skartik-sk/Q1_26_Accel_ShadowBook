@@ -223,7 +223,7 @@ pub const ORACLE_PRICE_OFFSET: usize = 73;         // byte offset in Pyth Lazer 
 | ephemeral-rollups-sdk (Rust) | 0.8.8 |
 | @magicblock-labs/ephemeral-rollups-sdk (TS) | ^0.8.5 |
 | @solana/web3.js | ^1.98.0 |
-| Solana CLI | 2.3.13 |
+| Solana CLI (Agave) | 3.1.11+ |
 | Rust | 1.85.0 |
 | Node | 24.x |
 

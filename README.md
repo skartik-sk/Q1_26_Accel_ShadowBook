@@ -94,9 +94,9 @@ tests/
 
 | Tool | Version |
 | --- | --- |
-| Solana CLI | 2.3.13 |
+| Solana CLI (Agave) | 3.1.11+ |
 | Anchor | 0.32.1 |
-| Rust | 1.86.0 |
+| Rust | 1.86.0+ |
 | Node.js | 20+ |
 
 ## Getting Started
@@ -118,10 +118,6 @@ anchor test
 # Deploy to devnet (sets up wallet, airdrops SOL, builds, and deploys)
 ./scripts/setup-devnet.sh
 ```
-
-### Known Build Issue
-
-The `ephemeral-rollups-sdk` dependency is currently commented out in `programs/shadow-book/Cargo.toml` because Solana's platform-tools v1.48 ships rustc 1.84, which does not support the `edition2024` feature required by a transitive dependency (`blake3 -> constant_time_eq 0.4.x`). The program builds and compiles without it. The SDK will be re-enabled when platform-tools updates to v1.49 or later.
 
 ## Work Chunks
 
