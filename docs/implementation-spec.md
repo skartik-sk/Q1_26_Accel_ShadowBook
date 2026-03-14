@@ -224,28 +224,246 @@ pub const ORACLE_PRICE_OFFSET: usize = 73;         // byte offset in Pyth Lazer 
 | @magicblock-labs/ephemeral-rollups-sdk (TS) | ^0.8.5 |
 | @solana/web3.js | ^1.98.0 |
 | Solana CLI (Agave) | 3.1.11+ |
-| Rust | 1.85.0 |
-| Node | 24.x |
+| Rust | 1.86.0+ |
+| Node | 20+ |
 
 ---
 
 ## Work Chunks
 
-See [implementation plan](/home/allen/.claude/plans/modular-stirring-taco.md) for detailed chunk descriptions, deliverables, and dependencies.
+To find all work items for a chunk: `grep -rn "TODO (Chunk X)" programs/ tests/ sdk/`
 
-| Chunk | What | Complexity | Est. Days |
-|-------|------|-----------|-----------|
-| **A** | Account structs + market init + helpers | M | 3 |
-| **B** | EATA token flow + settlement | M | 3 |
-| **C** | PER delegation + TEE instructions + matching | H | 5 |
-| **D** | TS client SDK + E2E tests | M | 4 |
-| **E** | Partial fills + market orders | M | 3 |
-| **F** | Advanced fees (maker/taker, tiers) | S | 2 |
-| **G** | Frontend (Next.js) | H | 5 |
-| **H** | Crash recovery + robustness | M | 3 |
+### Dependency Graph
 
-**Phase 1** (A-D): parallel, ~5 days to first E2E.
-**Phase 2** (E-H): independent chunks, pick after Phase 1 E2E passes.
+```
+A (account structs)  -- foundation, start first
+  |
+  |---> B (token flow)   -- needs Order/MatchResult types from A
+  |---> C (PER/TEE)      -- needs helpers + types from A
+  |---> D (SDK scaffold starts day 1, wires up as B+C deliver)
+              |
+         B + C land
+              |
+         D runs full E2E
+              |
+     E    F    G    H    (Phase 2, all independent)
+```
+
+**Critical path**: A then C then D (E2E test). B is parallel with C but must land before D's E2E.
+
+---
+
+### Chunk A: Account Structures + Market Init
+
+**Dependencies**: none
+
+Core data types everything else depends on. Every other chunk imports from here.
+
+**Deliverables**:
+
+- `programs/shadow-book/src/state/`:
+  - `MarketState` with `#[account(zero_copy)]` (already scaffolded)
+  - `Order`, `MatchResult` structs (already scaffolded)
+  - `OrderStatus` and `Side` enums (already scaffolded)
+- `programs/shadow-book/src/helpers.rs`:
+  - `insert_bid(market, order)` -- binary search insert, maintains price DESC + time ASC
+  - `insert_ask(market, order)` -- binary search insert, maintains price ASC + time ASC
+  - `remove_order(market, order_id, side)` -- find + shift array
+  - `find_order(market, order_id, side)` -- linear scan by order_id
+  - `cleanup_expired(market, now, max_removals)` -- removes expired orders, bounded
+  - All helpers are scaffolded. Implement the TODO bodies and add comprehensive unit tests.
+- `programs/shadow-book/src/instructions/initialize_market.rs`:
+  - Creates `MarketState` PDA with `seeds: [b"market", mint_a, mint_b]`
+  - Allocates full account size upfront
+  - Sets `authority`, `mint_a`, `mint_b`, `fee_rate_bps`, `keeper_reward_bps`, `oracle_feed_id`
+  - Validate `fee_rate_bps <= 1000` (max 10%)
+- `programs/shadow-book/src/instructions/cancel_order.rs`:
+  - Mainnet-only cancel: `require!(!market.is_delegated)`
+  - Validates signer is the order's trader
+  - Calls `remove_order()`, sets status=Cancelled
+- `programs/shadow-book/src/instructions/claim_expired.rs`:
+  - Permissionless (no signer check on caller)
+  - Calls `cleanup_expired(market, clock.unix_timestamp, MAX_EXPIRED_CLEANUP_PER_CALL)`
+  - Bounded: max 10 removals per call to cap compute
+
+**Tests**: `tests/market/initialize-market.test.ts`, `tests/orders/cancel-order.test.ts`, `tests/orders/claim-expired.test.ts`
+
+**Produces**: types + helpers consumed by B, C, D
+
+---
+
+### Chunk B: EATA Token Flow + Settlement
+
+**Dependencies**: needs `MarketState` type from A (can stub initially)
+
+All SPL token deposit/withdraw/settlement logic.
+
+**Deliverables**:
+
+- `programs/shadow-book/src/instructions/deposit.rs`:
+  - Init vault PDA `[b"vault", market]` + vault ATA if first deposit for this market
+  - Init EATA for trader via `initEphemeralAtaIx` if first deposit for this trader
+  - SPL `transfer` from trader's ATA to vault ATA
+  - Update EATA balance to track trader's deposited amount
+  - Validate: mint matches market's `mint_a` or `mint_b`
+- `programs/shadow-book/src/instructions/withdraw.rs`:
+  - SPL `transfer` from vault ATA back to trader's ATA
+  - Validate: trader has sufficient EATA balance, no open orders locking funds
+  - Fund locking: trader's balance minus sum of their open order sizes = available to withdraw
+- `programs/shadow-book/src/instructions/settle.rs`:
+  - Reads committed `match_results[0..match_count]` from `MarketState`
+  - For each `MatchResult` where `settled == false`:
+    - Transfer `size` of token_a: buyer's EATA to seller's EATA
+    - Transfer `size * price` of token_b: seller's EATA to buyer's EATA
+    - Deduct `fee_rate_bps` from both sides, credit to fee vault EATA
+    - If `keeper_reward_bps > 0`, credit keeper (tx signer) from fee vault
+    - Set `settled = true`
+  - Permissionless (incentivized by keeper reward)
+  - Bounded: max `MAX_SETTLEMENTS_PER_CALL` per invocation
+- `programs/shadow-book/src/instructions/collect_fees.rs`:
+  - Authority-only: withdraw accumulated fees from fee vault EATA to authority's ATA
+
+**Tests**: `tests/market/deposit.test.ts`, `tests/market/withdraw.test.ts`, `tests/settlement/settle.test.ts`, `tests/settlement/collect-fees.test.ts`
+
+**Produces**: settlement logic consumed by E2E tests in D
+
+---
+
+### Chunk C: PER Delegation + TEE Instructions
+
+**Dependencies**: needs types + helpers from A, EATA patterns from B
+
+The core privacy primitive. Study `private-payments-demo` and `magicblock-engine-examples/anchor-counter` thoroughly before starting.
+
+**Deliverables**:
+
+- `programs/shadow-book/src/instructions/create_order.rs` (mainnet, Phase A):
+  - Adds order to `MarketState` bids or asks via `insert_bid()`/`insert_ask()`
+  - Sets `side`, `price`, `timestamp`, `expires_at`, `status=Open`, `size=0` (placeholder)
+  - Validates: market not delegated, trader has sufficient EATA balance
+  - Generates unique `order_id` from `market.next_order_id` counter (monotonic)
+- `programs/shadow-book/src/instructions/delegate_market.rs` (mainnet, Phase A to B):
+  - Permissionless (incentivized by keeper reward)
+  - Validates: market has at least 1 bid AND 1 ask
+  - Creates permission via `CreatePermissionCpiBuilder` with empty members list (zero external readers)
+  - Delegates `MarketState` to TEE validator via `delegate_account()` with `DelegateConfig { validator: Some(TEE_PUBKEY), commit_frequency_ms: 30_000 }`
+  - Sets `market.is_delegated = true`, `market.delegated_at = clock.unix_timestamp`
+  - Uses `#[delegate]` macro with `#[account(del)]` on market field
+- `programs/shadow-book/src/instructions/submit_order_size.rs` (PER-only, Phase B):
+  - `#[ephemeral]` module attribute
+  - Validates: signer == order.trader, order status is Open, size > 0
+  - Writes actual `size` into the trader's order slot in `MarketState`
+  - This is the critical privacy moment -- size only exists inside TEE memory
+- `programs/shadow-book/src/instructions/match_orders.rs` (PER-only crank, Phase B):
+  - `#[ephemeral]` + `#[commit]` macros
+  - Matching algorithm (see Matching Algorithm section above for pseudocode):
+    1. Read Pyth Lazer oracle price from oracle account PDA
+    2. Walk asks from lowest price, find crossing bids
+    3. Fill at midpoint `(bid.price + ask.price) / 2`
+    4. Oracle sanity check: reject if fill deviates >5% from oracle
+    5. Write `MatchResult`, set both orders to Matched
+    6. Call `commit_and_undelegate_accounts` for `MarketState`
+  - Bounded: max `MAX_MATCHES_PER_CALL` matches per invocation
+  - Oracle account passed as remaining account (read-only, not delegated)
+- `programs/shadow-book/src/instructions/cancel_order_per.rs` (PER-only, Phase B):
+  - `#[ephemeral]` + `#[commit]`
+  - Validates: signer == order.trader
+  - Removes order, commits + undelegates if book is now empty
+  - If book still has orders, commits only (market stays in PER)
+
+**Tests**: `tests/orders/create-order.test.ts`, `tests/per/delegate-market.test.ts`, `tests/per/submit-order-size.test.ts`, `tests/per/match-orders.test.ts`, `tests/per/cancel-order-per.test.ts`
+
+**Produces**: committed `match_results` consumed by B's settle
+
+---
+
+### Chunk D: TypeScript Client SDK + E2E Tests
+
+**Dependencies**: needs deployed program from A+B+C (start scaffolding immediately)
+
+Client library, automated crank, and the E2E test suite that proves the entire system works.
+
+**Deliverables**:
+
+- `sdk/src/client.ts`:
+  - `ShadowBookClient` class wrapping all mainnet instructions
+  - Constructor takes `Connection` (mainnet) + `Wallet` + `programId`
+  - Methods: `initializeMarket()`, `deposit()`, `withdraw()`, `createOrder()`, `delegateMarket()`, `settle()`, `cancelOrder()`, `collectFees()`
+  - Each method builds, signs, sends tx, confirms, returns tx signature
+  - Typed return values (parse accounts after tx, not just signatures)
+- `sdk/src/per-client.ts`:
+  - `ShadowBookPERClient` extends `ShadowBookClient` with PER connection
+  - TEE auth: `verifyTeeRpcIntegrity(EPHEMERAL_RPC_URL)` + `getAuthToken()` on construction
+  - PER `Connection` at `${EPHEMERAL_RPC_URL}?token=${token}`
+  - Methods: `submitOrderSize()`, `matchOrders()`, `cancelOrderPER()`
+  - Polls mainnet after commit+undelegate (retry with backoff, max 10 attempts, 500ms intervals)
+- `sdk/src/crank.ts`:
+  - `ShadowBookCrank` class -- automated epoch lifecycle operator
+  - Polls market state: if not delegated and has bids + asks, calls `delegateMarket()`
+  - If delegated and size submission window passed, calls `matchOrders()`
+  - After match + commit, calls `settle()` to collect keeper reward
+  - Graceful shutdown, error logging, retry logic
+- `sdk/src/types.ts`:
+  - TypeScript types matching on-chain structs
+  - Zero-copy deserialization from raw account data (DataView reads at known offsets)
+- `tests/e2e/epoch-lifecycle.test.ts` -- full epoch lifecycle:
+  1. `initializeMarket(mint_a, mint_b, fee_rate=30bps, keeper_reward=5bps)`
+  2. Mint test tokens to Trader A and Trader B
+  3. Both traders `deposit`
+  4. Trader A `createOrder(BUY, price=100)`, Trader B `createOrder(SELL, price=95)`
+  5. Crank `delegateMarket()`, verify `is_delegated == true`
+  6. Both traders `submitOrderSize(50)` via PER
+  7. Privacy assertion: query mainnet, sizes must still be 0
+  8. Crank `matchOrders()` via PER, commits + undelegates
+  9. Verify `match_results[0]`: price=97 (midpoint), size=50
+  10. Crank `settle()`, verify EATA balances, fees deducted
+  11. Both traders `withdraw()`, verify ATA balances
+- Edge case tests: cancel, expiry, no crossing, multiple orders, insufficient funds, double settle
+
+**Produces**: the definitive proof the system works end-to-end on devnet
+
+---
+
+### Phase 2 Chunks (after Phase 1 E2E passes)
+
+#### Chunk E: Partial Fills + Market Orders
+
+- Modify `match_orders`: if `bid.size != ask.size`, fill `min(bid.size, ask.size)`, leave remainder as open order with `size -= fill_size`
+- Remaining order stays `status = Open` with reduced size, gets matched in next epoch
+- Market orders: `side=Buy, price=u64::MAX` or `side=Sell, price=0`, fills at whatever resting price exists
+- Market orders require Pyth oracle price as fill price (not midpoint, since no counterparty limit to reference)
+- Update `MatchResult` to track `fill_size` separately from order `size`
+- Tests: partial fill lifecycle, market order fills, oracle bounds check
+
+#### Chunk F: Advanced Fee Mechanism
+
+- Maker/taker fee split: `maker_fee_bps` and `taker_fee_bps` on `MarketState`
+- Fee vault EATA per market: `[b"fee_vault", market]`
+- Volume-based fee tiers: `if trader_volume > threshold then reduced_fee_bps` (stored in a `TraderStats` PDA)
+- `update_fees` authority-only instruction to adjust fee rates
+- Tests: fee tier transitions, maker vs taker fee correctness
+
+#### Chunk G: Frontend
+
+- Next.js 14+ app with app router
+- Wallet adapter (Phantom, Solflare, Backpack)
+- Pages:
+  - Dashboard: connected wallet balances, deposited amounts, open orders, trade history
+  - Trade: deposit/withdraw forms, order placement (side + price, size hidden until TEE), epoch status indicator
+  - Market: select market pair, post-settlement trade tape (price + size of completed trades, public data only)
+- No order book display -- that is the entire point. Show "Market Status: Collecting Orders / Matching in Progress / Settling"
+- Real-time updates via websocket subscription to market account changes
+- Uses `ShadowBookClient` and `ShadowBookPERClient` from Chunk D's SDK
+
+#### Chunk H: Crash Recovery + Robustness
+
+- Order timeout: `expires_at = clock.unix_timestamp + ORDER_TTL_SECONDS` set at order creation
+- Delegation timeout: if market has been delegated for >5 minutes without a commit, anyone can call `force_undelegate` (emergency instruction)
+- `force_undelegate`: checks delegation timestamp, calls `undelegate_account` CPI, resets `is_delegated = false`, all orders revert to `size=0` (safe since no sizes were committed)
+- SDK retry logic: `ShadowBookPERClient` wraps PER calls with exponential backoff (500ms, 1s, 2s, 4s, 8s), max 5 retries
+- Crank health monitoring: `ShadowBookCrank` logs metrics (matches/epoch, settle latency, PER connection failures), exposes a health endpoint
+- Stale match cleanup: if `match_results` have `settled == false` for >10 minutes after undelegate, crank auto-calls `settle`
+- Tests: simulate PER timeout, verify force_undelegate, verify retry logic
 
 ---
 

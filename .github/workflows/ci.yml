@@ -33,6 +33,31 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy, rustfmt
 
+      - name: Cache Solana CLI
+        id: cache-solana
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ env.SOLANA_CHANNEL }}
+
+      - name: Install Solana CLI
+        if: steps.cache-solana.outputs.cache-hit != 'true'
+        run: sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_CHANNEL }}/install)"
+
+      - name: Add Solana to PATH
+        run: echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Cache Anchor CLI
+        id: cache-anchor
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/anchor
+          key: anchor-${{ runner.os }}-${{ env.ANCHOR_VERSION }}
+
+      - name: Install Anchor CLI
+        if: steps.cache-anchor.outputs.cache-hit != 'true'
+        run: cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --force --locked
+
       - name: Cache Rust dependencies
         uses: actions/cache@v4
         with:
@@ -43,32 +68,11 @@ jobs:
           key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: rust-${{ runner.os }}-
 
-      - name: Install Solana CLI
-        run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_CHANNEL }}/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
-
-      - name: Install Anchor CLI
-        run: |
-          cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --force --locked
-
-      - name: Verify toolchain
-        run: |
-          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-          solana --version
-          anchor --version
-          rustc --version
-          cargo-build-sbf --version
-
       - name: Generate keypair
-        run: |
-          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-          solana-keygen new --no-bip39-passphrase --silent
+        run: solana-keygen new --no-bip39-passphrase --silent --force
 
       - name: Build program
-        run: |
-          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-          anchor build
+        run: anchor build
 
       - name: Run clippy
         run: cargo clippy --workspace -- -D warnings

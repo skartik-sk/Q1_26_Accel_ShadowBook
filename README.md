@@ -123,16 +123,16 @@ anchor test
 
 The project is divided into independent work chunks that can be picked up in parallel. Each instruction stub contains `TODO (Chunk X)` comments with implementation steps.
 
-| Chunk | Scope | Complexity |
-| --- | --- | --- |
-| A | Account structs, market init, cancel, claim_expired, helpers | Medium |
-| B | EATA token flow, deposit, withdraw, settle, collect_fees | Medium |
-| C | PER delegation, submit_order_size, match_orders, cancel_order_per | High |
-| D | TypeScript SDK, crank, E2E integration tests | Medium |
-| E | Partial fills, market orders (Phase 2) | Medium |
-| F | Advanced fees: maker/taker split, volume tiers (Phase 2) | Small |
-| G | Frontend: Next.js, wallet adapter (Phase 2) | High |
-| H | Crash recovery, force_undelegate, retry logic (Phase 2) | Medium |
+| Chunk | Scope |
+| --- | --- |
+| A | Account structs, market init, cancel, claim_expired, helpers |
+| B | EATA token flow, deposit, withdraw, settle, collect_fees |
+| C | PER delegation, submit_order_size, match_orders, cancel_order_per |
+| D | TypeScript SDK, crank, E2E integration tests |
+| E | Partial fills, market orders (Phase 2) |
+| F | Advanced fees: maker/taker split, volume tiers (Phase 2) |
+| G | Frontend: Next.js, wallet adapter (Phase 2) |
+| H | Crash recovery, force_undelegate, retry logic (Phase 2) |
 
 Chunks A, B, and C can start in parallel. D starts scaffolding immediately and integrates as others deliver. Phase 2 chunks (E-H) begin after the Phase 1 E2E test passes.
 
