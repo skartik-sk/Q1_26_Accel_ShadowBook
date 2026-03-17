@@ -12,15 +12,33 @@ use crate::state::MarketState;
 /// * `keeper_reward_bps` — Share of fee paid to settle caller.
 /// * `oracle_feed_id` — Pyth Lazer feed ID for oracle sanity checks.
 pub fn handler(
-    _ctx: Context<InitializeMarket>,
-    _fee_rate_bps: u16,
-    _keeper_reward_bps: u16,
-    _oracle_feed_id: [u8; 32],
+    ctx: Context<InitializeMarket>,
+    fee_rate_bps: u16,
+    keeper_reward_bps: u16,
+    oracle_feed_id: [u8; 32],
 ) -> Result<()> {
-    // TODO (Chunk A): Implement
-    // 1. Validate fee_rate_bps <= 1000 (max 10%)
-    // 2. Populate all MarketState fields
-    // 3. Set bump from ctx.bumps
+    require!(
+        fee_rate_bps <= 1000,
+        crate::errors::ShadowBookError::FeeRateTooHigh
+    );
+
+    let mut market = ctx.accounts.market.load_init()?;
+
+    market.mint_a = ctx.accounts.mint_a.key().to_bytes();
+    market.mint_b = ctx.accounts.mint_b.key().to_bytes();
+    market.authority = ctx.accounts.authority.key().to_bytes();
+    market.total_volume = 0;
+    market.fee_rate_bps = fee_rate_bps;
+    market.keeper_reward_bps = keeper_reward_bps;
+    market.oracle_feed_id = oracle_feed_id;
+    market.next_order_id = 1;
+    market.bid_count = 0;
+    market.ask_count = 0;
+    market.match_count = 0;
+    market.is_delegated = 0;
+    market.delegated_at = 0;
+    market.bump = ctx.bumps.market;
+
     Ok(())
 }
 

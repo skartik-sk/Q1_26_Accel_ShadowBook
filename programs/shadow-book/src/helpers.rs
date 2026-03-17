@@ -207,15 +207,122 @@ mod tests {
         o
     }
 
-    // TODO (Chunk A): Add comprehensive tests for:
-    // - insert_bid maintains price DESC, time ASC invariant
-    // - insert_ask maintains price ASC, time ASC invariant
-    // - insert into full book returns OrderBookFull
-    // - find_order returns correct index / None
-    // - remove_order shifts array correctly
-    // - remove_order on missing ID returns OrderNotFound
-    // - cleanup_expired removes only expired, respects max_removals bound
-    // - is_within_oracle_band edge cases (0 oracle, exact boundary, overflow)
+    #[test]
+    fn test_insert_bid_sorting() {
+        let mut market = MarketState::zeroed();
+        let o1 = make_order(1, Side::Buy, 100, 10);
+        let o2 = make_order(2, Side::Buy, 120, 20);
+        let o3 = make_order(3, Side::Buy, 100, 5);
+
+        assert_eq!(insert_bid(&mut market, o1).unwrap(), 0);
+        assert_eq!(insert_bid(&mut market, o2).unwrap(), 0);
+        assert_eq!(insert_bid(&mut market, o3).unwrap(), 1);
+
+        assert_eq!(market.bids[0].order_id, 2); // 120
+        assert_eq!(market.bids[1].order_id, 3); // 100, t=5
+        assert_eq!(market.bids[2].order_id, 1); // 100, t=10
+        assert_eq!(market.bid_count, 3);
+    }
+
+    #[test]
+    fn test_insert_ask_sorting() {
+        let mut market = MarketState::zeroed();
+        let o1 = make_order(1, Side::Sell, 100, 10);
+        let o2 = make_order(2, Side::Sell, 80, 20);
+        let o3 = make_order(3, Side::Sell, 100, 5);
+
+        assert_eq!(insert_ask(&mut market, o1).unwrap(), 0);
+        assert_eq!(insert_ask(&mut market, o2).unwrap(), 0);
+        assert_eq!(insert_ask(&mut market, o3).unwrap(), 1);
+
+        assert_eq!(market.asks[0].order_id, 2); // 80
+        assert_eq!(market.asks[1].order_id, 3); // 100, t=5
+        assert_eq!(market.asks[2].order_id, 1); // 100, t=10
+        assert_eq!(market.ask_count, 3);
+    }
+
+    #[test]
+    fn test_order_book_full() {
+        let mut market = MarketState::zeroed();
+        market.bid_count = crate::constants::MAX_ORDERS as u16;
+        let o = make_order(1, Side::Buy, 100, 10);
+        assert_eq!(
+            insert_bid(&mut market, o).unwrap_err(),
+            crate::errors::ShadowBookError::OrderBookFull.into()
+        );
+    }
+
+    #[test]
+    fn test_find_order() {
+        let mut market = MarketState::zeroed();
+        insert_bid(&mut market, make_order(1, Side::Buy, 100, 10)).unwrap();
+        insert_bid(&mut market, make_order(2, Side::Buy, 120, 20)).unwrap();
+
+        assert_eq!(find_order(&market, 2, Side::Buy), Some(0)); // 120
+        assert_eq!(find_order(&market, 1, Side::Buy), Some(1)); // 100
+        assert_eq!(find_order(&market, 3, Side::Buy), None);
+        assert_eq!(find_order(&market, 2, Side::Sell), None);
+    }
+
+    #[test]
+    fn test_remove_order() {
+        let mut market = MarketState::zeroed();
+        insert_ask(&mut market, make_order(1, Side::Sell, 100, 10)).unwrap();
+        insert_ask(&mut market, make_order(2, Side::Sell, 120, 20)).unwrap();
+        insert_ask(&mut market, make_order(3, Side::Sell, 110, 15)).unwrap(); // order: 1, 3, 2
+
+        let removed = remove_order(&mut market, 3, Side::Sell).unwrap();
+        assert_eq!(removed.order_id, 3);
+        assert_eq!(market.ask_count, 2);
+        assert_eq!(market.asks[0].order_id, 1);
+        assert_eq!(market.asks[1].order_id, 2);
+    }
+
+    #[test]
+    fn test_remove_order_not_found() {
+        let mut market = MarketState::zeroed();
+        assert_eq!(
+            remove_order(&mut market, 1, Side::Buy).unwrap_err(),
+            crate::errors::ShadowBookError::OrderNotFound.into()
+        );
+    }
+
+    #[test]
+    fn test_cleanup_expired() {
+        let mut market = MarketState::zeroed();
+        let mut o1 = make_order(1, Side::Buy, 100, 10);
+        o1.expires_at = 100;
+        let mut o2 = make_order(2, Side::Buy, 90, 20);
+        o2.expires_at = 200;
+        let mut o3 = make_order(3, Side::Buy, 80, 30);
+        o3.expires_at = 300;
+
+        insert_bid(&mut market, o1).unwrap();
+        insert_bid(&mut market, o2).unwrap();
+        insert_bid(&mut market, o3).unwrap();
+
+        // Time is 250, o1 and o2 should be expired. But limit max_removals to 1.
+        let removed = cleanup_expired(&mut market, 250, 1);
+        assert_eq!(removed, 1);
+        assert_eq!(market.bid_count, 2);
+        assert_eq!(market.bids[0].order_id, 2); // o2 now at index 0
+
+        // Clean again without limit
+        let removed2 = cleanup_expired(&mut market, 250, 10);
+        assert_eq!(removed2, 1);
+        assert_eq!(market.bid_count, 1);
+        assert_eq!(market.bids[0].order_id, 3);
+    }
+
+    #[test]
+    fn test_is_within_oracle_band_edges() {
+        // 0 oracle returns true
+        assert!(is_within_oracle_band(1000, 0, 500));
+
+        // exact boundary
+        assert!(is_within_oracle_band(1050, 1000, 500));
+        assert!(!is_within_oracle_band(1051, 1000, 500));
+    }
 
     #[test]
     fn test_order_size() {

@@ -37,6 +37,7 @@ pub enum OrderStatus {
 /// `size` is written **only inside the TEE** via `submit_order_size`.
 /// On mainnet, `size` remains 0 until the match result is committed.
 #[zero_copy]
+#[derive(Debug)]
 #[repr(C)]
 pub struct Order {
     /// Owner of this order.

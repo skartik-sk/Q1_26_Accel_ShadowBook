@@ -1,6 +1,10 @@
 use anchor_lang::prelude::*;
 
-use crate::state::MarketState;
+use crate::constants::ORDER_TTL_SECONDS;
+use crate::errors::ShadowBookError;
+use crate::helpers::{insert_ask, insert_bid};
+use crate::state::{MarketState, Order, OrderStatus, Side};
+use bytemuck::Zeroable;
 
 /// Creates a new order in the market's order book.
 ///
@@ -17,12 +21,52 @@ use crate::state::MarketState;
 /// - Market must NOT be delegated (`is_delegated == false`).
 /// - Trader must have sufficient EATA balance for worst-case fill.
 /// - Order book must not be full on the given side.
-pub fn handler(_ctx: Context<CreateOrder>, _side: u8, _price: u64) -> Result<()> {
-    // TODO (Chunk C): Implement
-    // 1. require!(!market.is_delegated)
-    // 2. Build Order { side, price, size: 0, status: Open, timestamp: clock, expires_at, ... }
-    // 3. Assign order_id from market.next_order_id++
-    // 4. Call insert_bid() or insert_ask() based on side
+pub fn handler(ctx: Context<CreateOrder>, side: u8, price: u64) -> Result<()> {
+    let mut market = ctx.accounts.market.load_mut()?;
+
+    require!(!market.is_delegated(), ShadowBookError::MarketDelegated);
+
+    let parsed_side = match side {
+        0 => Side::Buy,
+        1 => Side::Sell,
+        _ => return err!(ShadowBookError::InvalidSide),
+    };
+
+    let order_id = market.next_order_id;
+    market.next_order_id = market
+        .next_order_id
+        .checked_add(1)
+        .ok_or(ShadowBookError::MathOverflow)?;
+
+    let now = Clock::get()?.unix_timestamp;
+
+    let mut order = Order::zeroed();
+    order.trader = ctx.accounts.trader.key().to_bytes();
+    order.order_id = order_id;
+    order.side = side;
+    order.status = OrderStatus::Open as u8;
+    order.price = price;
+    order.size = 0; // Size is 0 until submitted in TEE
+    order.timestamp = now;
+    order.expires_at = now.checked_add(ORDER_TTL_SECONDS).unwrap_or(i64::MAX);
+    order.matched_price = 0;
+
+    match parsed_side {
+        Side::Buy => {
+            insert_bid(&mut market, order)?;
+        }
+        Side::Sell => {
+            insert_ask(&mut market, order)?;
+        }
+    }
+
+    msg!(
+        "Order {} created (side: {}, price: {})",
+        order_id,
+        side,
+        price
+    );
+
     Ok(())
 }
 
@@ -34,7 +78,5 @@ pub struct CreateOrder<'info> {
     #[account(mut)]
     pub market: AccountLoader<'info, MarketState>,
 
-    // TODO (Chunk C): Add accounts
-    // - clock: Sysvar<Clock> (or use Clock::get())
     pub system_program: Program<'info, System>,
 }

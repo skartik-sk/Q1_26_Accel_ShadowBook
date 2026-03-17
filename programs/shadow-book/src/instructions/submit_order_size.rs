@@ -1,6 +1,8 @@
 use anchor_lang::prelude::*;
 
-use crate::state::MarketState;
+use crate::errors::ShadowBookError;
+use crate::helpers::find_order;
+use crate::state::{MarketState, OrderStatus, Side};
 
 /// Writes the actual order size into the delegated `MarketState` inside the TEE.
 ///
@@ -20,14 +22,45 @@ use crate::state::MarketState;
 /// - Order must have status `Open`.
 /// - `size > 0`.
 /// - Market must be delegated (`is_delegated == true`).
-pub fn handler(_ctx: Context<SubmitOrderSize>, _order_id: u64, _size: u64) -> Result<()> {
-    // TODO (Chunk C): Implement
-    // 1. require!(market.is_delegated)
-    // 2. Find order by order_id
-    // 3. require!(order.trader == trader.key())
-    // 4. require!(order.status == Open)
-    // 5. require!(size > 0)
-    // 6. order.size = size
+pub fn handler(ctx: Context<SubmitOrderSize>, order_id: u64, size: u64) -> Result<()> {
+    let mut market = ctx.accounts.market.load_mut()?;
+
+    require!(market.is_delegated(), ShadowBookError::MarketNotDelegated);
+
+    let mut order_idx = None;
+    let mut order_side = Side::Buy;
+
+    if let Some(idx) = find_order(&market, order_id, Side::Buy) {
+        order_idx = Some(idx);
+        order_side = Side::Buy;
+    } else if let Some(idx) = find_order(&market, order_id, Side::Sell) {
+        order_idx = Some(idx);
+        order_side = Side::Sell;
+    }
+
+    let idx = order_idx.ok_or(ShadowBookError::OrderNotFound)?;
+
+    let order = match order_side {
+        Side::Buy => &mut market.bids[idx],
+        Side::Sell => &mut market.asks[idx],
+    };
+
+    require!(
+        order.trader_pubkey() == ctx.accounts.trader.key(),
+        ShadowBookError::UnauthorizedOrderAccess
+    );
+
+    require!(
+        order.status == OrderStatus::Open as u8,
+        ShadowBookError::OrderNotOpen
+    );
+
+    require!(size > 0, ShadowBookError::ZeroSize);
+
+    order.size = size;
+
+    msg!("Order {} size submitted privately", order_id);
+
     Ok(())
 }
 
@@ -37,6 +70,4 @@ pub struct SubmitOrderSize<'info> {
 
     #[account(mut)]
     pub market: AccountLoader<'info, MarketState>,
-    // NOTE: This instruction runs inside PER only.
-    // Uses #[ephemeral] module attribute (Chunk C will add this).
 }
