@@ -27,10 +27,10 @@ pub const MAINNET_TEE_VALIDATOR: Pubkey = pubkey!("MTEWGuqxUpYZGFJQcp8tLN7x5v9BS
 // ---------------------------------------------------------------------------
 
 /// Maximum number of orders per side (bids or asks).
-pub const MAX_ORDERS: usize = 256;
+pub const MAX_ORDERS: usize = 32;
 
 /// Maximum number of pending match results.
-pub const MAX_MATCHES: usize = 128;
+pub const MAX_MATCHES: usize = 32;
 
 /// Maximum matches processed in a single `match_orders` call.
 pub const MAX_MATCHES_PER_CALL: usize = 10;

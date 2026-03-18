@@ -1,22 +1,19 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use crate::state::MarketState;
 
-/// Deposits SPL tokens into the market vault using the EATA pattern.
-///
-/// **Chunk B** — mainnet instruction.
-///
-/// # Flow
-/// 1. Init vault + vault ATA if first deposit for this market.
-/// 2. Init EATA for trader if first deposit for this trader.
-/// 3. SPL `transfer` from trader's ATA to vault ATA.
-/// 4. Update EATA balance.
-///
-/// # Validation
-/// - Mint must match market's `mint_a` or `mint_b`.
-pub fn handler(_ctx: Context<Deposit>, _amount: u64) -> Result<()> {
-    // TODO (Chunk B): Implement using EATA pattern from MagicBlock SDK
-    // - initVaultIx / initVaultAtaIx
-    // - initEphemeralAtaIx
-    // - transferToVaultIx
+pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+    require!(amount > 0, crate::errors::ShadowBookError::ZeroSize);
+
+    let cpi_accounts = Transfer {
+        from: ctx.accounts.trader_token_account.to_account_info(),
+        to: ctx.accounts.vault_token_account.to_account_info(),
+        authority: ctx.accounts.trader.to_account_info(),
+    };
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+    token::transfer(cpi_ctx, amount)?;
+
     Ok(())
 }
 
@@ -25,12 +22,21 @@ pub struct Deposit<'info> {
     #[account(mut)]
     pub trader: Signer<'info>,
 
-    // TODO (Chunk B): Add accounts
-    // - market: AccountLoader<MarketState>
-    // - trader_token_account: Account<TokenAccount>
-    // - vault / vault_ata (EATA pattern)
-    // - ephemeral_ata (EATA pattern)
-    // - token_program
-    // - system_program
+    #[account(mut)]
+    pub market: AccountLoader<'info, MarketState>,
+
+    #[account(mut)]
+    pub trader_token_account: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = market
+    )]
+    pub vault_token_account: Account<'info, TokenAccount>,
+
+    pub mint: Account<'info, Mint>,
+
+    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }

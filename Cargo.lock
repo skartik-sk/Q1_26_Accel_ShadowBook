@@ -279,6 +279,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "anchor_rock_paper_scissor"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "ephemeral-rollups-sdk",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -766,6 +774,7 @@ version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5382adbd81b6532054e6b270c2bac713bf6ca03fa8391dc67259bd9a96f9822b"
 dependencies = [
+ "anchor-lang",
  "base64ct",
  "borsh 0.10.4",
  "ephemeral-rollups-sdk-attribute-action",
