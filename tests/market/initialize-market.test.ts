@@ -1,35 +1,108 @@
-/**
- * Tests: initialize_market instruction.
- * Chunk: A / D
- */
-
 import { assert } from "chai";
-import { provider, authority, globalSetup } from "../setup/test-context";
+import { SystemProgram, Keypair, PublicKey } from "@solana/web3.js";
+import {
+  program,
+  authority,
+  globalSetup,
+  mintA,
+  mintB,
+  marketPda,
+} from "../setup/test-context";
 
 describe("initialize_market", () => {
+  const oracleFeedId = Array(32).fill(0);
+  oracleFeedId[0] = 1; // Dummy ID
+
   before(async () => {
     await globalSetup();
   });
 
   it("creates a market with correct parameters", async () => {
-    // TODO (Chunk A/D):
-    // 1. Call initialize_market(fee_rate=30, keeper_reward=5, oracle_feed_id)
-    // 2. Fetch MarketState via AccountLoader
-    // 3. Assert mint_a, mint_b match expected
-    // 4. Assert authority matches signer
-    // 5. Assert fee_rate_bps == 30, keeper_reward_bps == 5
-    // 6. Assert bid_count == 0, ask_count == 0
-    // 7. Assert is_delegated == false
+    const feeRateBps = 30;
+    const keeperRewardBps = 5;
+
+    await program.methods
+      .initializeMarket(feeRateBps, keeperRewardBps, oracleFeedId)
+      .accounts({
+        authority: authority.publicKey,
+        mintA: mintA,
+        mintB: mintB,
+        market: marketPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([authority])
+      .rpc();
+
+    // Fetch MarketState
+    const marketState = await program.account.marketState.fetch(marketPda);
+
+    // Assertions
+    assert.deepEqual(marketState.mintA, Array.from(mintA.toBuffer()));
+    assert.deepEqual(marketState.mintB, Array.from(mintB.toBuffer()));
+    assert.deepEqual(
+      marketState.authority,
+      Array.from(authority.publicKey.toBuffer()),
+    );
+    assert.equal(marketState.feeRateBps, feeRateBps);
+    assert.equal(marketState.keeperRewardBps, keeperRewardBps);
+    assert.deepEqual(marketState.oracleFeedId, oracleFeedId);
+    assert.equal(marketState.bidCount, 0);
+    assert.equal(marketState.askCount, 0);
+    assert.equal(marketState.isDelegated, 0);
+    assert.equal(marketState.matchCount, 0);
   });
 
   it("rejects duplicate market for the same token pair", async () => {
-    // TODO (Chunk A/D):
-    // Calling initialize_market again with same mints should fail
-    // with an "already in use" error (PDA already exists).
+    const feeRateBps = 30;
+    const keeperRewardBps = 5;
+
+    try {
+      await program.methods
+        .initializeMarket(feeRateBps, keeperRewardBps, oracleFeedId)
+        .accounts({
+          authority: authority.publicKey,
+          mintA: mintA,
+          mintB: mintB,
+          market: marketPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([authority])
+        .rpc();
+
+      assert.fail("Should have thrown an error for duplicate market");
+    } catch (err: any) {
+      assert.include(err.message, "already in use");
+    }
   });
 
   it("rejects fee rate above 10%", async () => {
-    // TODO (Chunk A/D):
-    // Call with fee_rate_bps = 1001 (>10%), expect FeeRateTooHigh error.
+    const feeRateBps = 1001; // > 10%
+    const keeperRewardBps = 5;
+
+    // Use dummy mints so we don't hit the PDA already in use error
+    const dummyMint1 = Keypair.generate().publicKey;
+    const dummyMint2 = Keypair.generate().publicKey;
+    const [dummyMarketPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("market"), dummyMint1.toBuffer(), dummyMint2.toBuffer()],
+      program.programId,
+    );
+
+    try {
+      await program.methods
+        .initializeMarket(feeRateBps, keeperRewardBps, oracleFeedId)
+        .accounts({
+          authority: authority.publicKey,
+          mintA: dummyMint1,
+          mintB: dummyMint2,
+          market: dummyMarketPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([authority])
+        .rpc();
+
+      assert.fail("Should have thrown FeeRateTooHigh error");
+    } catch (err: any) {
+      assert.include(err.message, "FeeRateTooHigh");
+    }
   });
 });
